@@ -8,7 +8,7 @@ The system is built on ROS 2 and leverages the ros2swarm library to enable decen
 <div style="display: flex; justify-content: center;">
   <img src="photos/proposal.png" alt="blocky" style="width: 50%; max-width: 1000px; height: auto; border-radius: 5px;">
 </div>
-
+Laban Movement Classification and Robotic Swarm Response
 ---
 
 ### Early Inspiration

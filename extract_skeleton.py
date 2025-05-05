@@ -1,51 +1,47 @@
-# extract_skeletons.py
-import cv2
-import mediapipe as mp
 import os
-import numpy as np
+import cv2
 import json
+import mediapipe as mp
 
-# Setup paths
-input_video = "dance_dataset/float/float_2024-04-28_14-33-10.mp4"
-output_dir = input_video.replace(".mp4", "_keypoints")
-os.makedirs(output_dir, exist_ok=True)
+input_dir = "dance_dataset/float"  # or punch, etc.
+video_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".mp4")])
 
-# Init MediaPipe Pose
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5)
-mp_drawing = mp.solutions.drawing_utils
 
-# Open video
-cap = cv2.VideoCapture(input_video)
-frame_idx = 0
+for video_file in video_files:
+    video_path = os.path.join(input_dir, video_file)
+    output_dir = video_path.replace(".mp4", "_keypoints")
+    os.makedirs(output_dir, exist_ok=True)
 
-print(f"Processing: {input_video}")
+    cap = cv2.VideoCapture(video_path)
+    frame_idx = 0
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f" Processing {video_file} ({frame_count} frames)...")
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-    # Convert to RGB
-    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = pose.process(image)
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = pose.process(image_rgb)
 
-    if results.pose_landmarks:
-        # Extract (x, y, z, visibility) for each of 33 keypoints
-        keypoints = [{
-            'x': lm.x,
-            'y': lm.y,
-            'z': lm.z,
-            'visibility': lm.visibility
-        } for lm in results.pose_landmarks.landmark]
+        if results.pose_landmarks:
+            keypoints = [{
+                'x': lm.x,
+                'y': lm.y,
+                'z': lm.z,
+                'visibility': lm.visibility
+            } for lm in results.pose_landmarks.landmark]
 
-        # Save to .json
-        with open(f"{output_dir}/frame_{frame_idx:04d}.json", "w") as f:
-            json.dump(keypoints, f)
-    
-    frame_idx += 1
+            out_file = os.path.join(output_dir, f"frame_{frame_idx:04d}.json")
+            with open(out_file, "w") as f:
+                json.dump(keypoints, f)
 
-cap.release()
+        frame_idx += 1
+
+    cap.release()
+    print(f"✅ Saved {frame_idx} frames to {output_dir}")
+
 pose.close()
-
-print(f"Finished! Saved {frame_idx} frames of keypoints to {output_dir}/")

@@ -90,6 +90,7 @@ opencv-python==4.11.0.86
 opt_einsum==3.4.0
 osrf-pycommon==2.1.4
 packaging==25.0
+pandas==2.2.3
 pcl-msgs==1.0.0
 pendulum-msgs==0.33.4
 pillow==11.2.1
@@ -98,6 +99,7 @@ pycparser==2.22
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 python-qt-binding==2.2.1
+pytz==2025.2
 qt-dotgraph==2.7.4
 qt-gui==2.7.4
 qt-gui-cpp==2.7.4
@@ -171,6 +173,7 @@ rqt-tf-tree==1.0.5
 rqt-topic==1.7.2
 scikit-learn==1.6.1
 scipy==1.15.2
+seaborn==0.13.2
 sensor-msgs==5.3.5
 sensor-msgs-py==5.3.5
 sentencepiece==0.2.0
@@ -202,6 +205,7 @@ trajectory-msgs==5.3.5
 turtlebot3-msgs==2.2.1
 turtlesim==1.8.3
 type-description-interfaces==2.0.2
+tzdata==2025.2
 unique-identifier-msgs==2.5.0
 urdfdom-py==1.2.1
 vision-msgs==4.1.1

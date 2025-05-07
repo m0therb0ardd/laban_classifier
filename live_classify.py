@@ -81,10 +81,11 @@ acc_mag = np.linalg.norm(acc, axis=1)
 jerk_mag = np.linalg.norm(jerk, axis=1)
 
 features = np.array([[
-    np.mean(vel_mag), np.max(vel_mag),
-    np.mean(acc_mag), np.max(acc_mag),
-    np.mean(jerk_mag), np.max(jerk_mag)
+    np.mean(vel_mag), np.max(vel_mag), np.std(vel_mag),
+    np.mean(acc_mag), np.max(acc_mag), np.std(acc_mag),
+    np.mean(jerk_mag), np.max(jerk_mag), np.std(jerk_mag)
 ]])
+
 
 # Classify
 label = clf.predict(features)[0]

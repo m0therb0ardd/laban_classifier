@@ -7,7 +7,6 @@ import pandas as pd
 dataset_root = "dance_dataset"
 fps = 20
 dt = 1 / fps
-wrist_index = 16
 min_visibility = 0.5
 
 all_features = []
@@ -31,26 +30,34 @@ for label in os.listdir(dataset_root):
         for f in frame_files:
             with open(os.path.join(kp_dir, f)) as jf:
                 data = json.load(jf)
-                kp = data[wrist_index]
-                if kp["visibility"] > min_visibility:
-                    positions.append([kp["x"], kp["y"], kp["z"]])
-                else:
-                    positions.append([np.nan, np.nan, np.nan])
+                # kp = data[wrist_index]
+                pose_vector = []
+                for i in range(len(data)):  # For all landmarks in the frame
+                    if data[i]["visibility"] > min_visibility:
+                        pose_vector.extend([data[i]["x"], data[i]["y"], data[i]["z"]])
+                    else:
+                        pose_vector.extend([np.nan, np.nan, np.nan])
+                positions.append(pose_vector)
 
         positions = np.array(positions)
 
-        # Skip if not enough valid data
-        if positions.shape[0] < 5:
-            print(f"Skipping {kp_dir} (too few frames)")
-            continue
-
         # Interpolate missing values
-        for dim in range(3):
+        for dim in range(positions.shape[1]):
             series = positions[:, dim]
             mask = np.isnan(series)
             if not np.all(mask):
                 series[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), series[~mask])
             positions[:, dim] = series
+
+        # Replace any remaining NaNs with zeros --> we need this so we dont get all NaN values when we do gradient for velocity adn acceleration later
+        positions = np.nan_to_num(positions, nan=0.0)
+
+
+        # # Final check before computing features
+        # print(f"→ About to compute motion features for: {item}")
+        # print("→ Any NaNs left in positions?", np.isnan(positions).any())
+        # print("→ First few values:\n", positions[:3, :9])
+
 
         # Compute motion features
         vel = np.gradient(positions, dt, axis=0)
@@ -61,6 +68,11 @@ for label in os.listdir(dataset_root):
         acc_mag = np.linalg.norm(acc, axis=1)
         jerk_mag = np.linalg.norm(jerk, axis=1)
 
+        # print("✔️ Velocity magnitude sample:", vel_mag[:5])
+        # print("✔️ Acceleration magnitude sample:", acc_mag[:5])
+        # print("✔️ Jerk magnitude sample:", jerk_mag[:5])
+
+
         features = {
             "source" : item,
             "mean_velocity": np.mean(vel_mag),
@@ -69,6 +81,9 @@ for label in os.listdir(dataset_root):
             "max_acceleration": np.max(acc_mag),
             "mean_jerk": np.mean(jerk_mag),
             "max_jerk": np.max(jerk_mag),
+            "std_velocity": np.std(vel_mag),
+            "std_acceleration": np.std(acc_mag),
+            "std_jerk": np.std(jerk_mag),
             "label": label
         }
 
@@ -77,4 +92,4 @@ for label in os.listdir(dataset_root):
 # Save to CSV
 df = pd.DataFrame(all_features)
 df.to_csv("motion_features.csv", index=False)
-print("✅ Saved motion_features.csv with", len(df), "entries.")
+print("Saved motion_features.csv with", len(df), "entries.")

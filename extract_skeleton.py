@@ -3,7 +3,7 @@ import cv2
 import json
 import mediapipe as mp
 
-input_dir = "dance_dataset/float"  # or punch, etc.
+input_dir = "dance_dataset/punch"  # or punch, etc.
 video_files = sorted([f for f in os.listdir(input_dir) if f.endswith(".mp4")])
 
 mp_pose = mp.solutions.pose

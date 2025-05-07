@@ -9,6 +9,12 @@ import joblib
 # Load your csv data with motion features
 df = pd.read_csv("motion_features.csv")
 
+# Check class distribution
+print(" Label distribution in dataset:")
+print(df["label"].value_counts())  
+print()
+
+
 # Separate features(inputS) (X) and labels (y)
 # x: the motion feature used to predict
 # y: the correct label used to train and test the model 

@@ -19,6 +19,15 @@ To classify human movement using **Laban Movement Analysis (LMA)** into four exp
 - **Space**: side open/ side across
 - **Body**: impulsive/ swing
 
+  1. FLOAT **
+  2. PUNCH **
+  3. FLICK**
+  4. DAB
+  5. GLIDE
+  6. SLASH
+  7. WRING
+  8. PRESS**
+
 <div style="display: flex; justify-content: center;">
   <img src="photos/labnan_hierarchy.png" alt="blocky" style="width: 75%; max-width: 1000px; height: auto; border-radius: 5px;">
 </div>

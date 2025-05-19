@@ -8,8 +8,9 @@ from datetime import datetime
 label = input("Enter movement label (e.g., float, punch): ").strip().lower()
 
 # Create output folder
-output_dir = f"dance_dataset/{label}"
+output_dir = f"full_body_dance_dataset/dance_dataset/{label}"
 os.makedirs(output_dir, exist_ok=True)
+
 
 # Create timestamp
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -21,7 +22,7 @@ frame_width = 640
 frame_height = 480
 duration = 5  # seconds
 
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(6) #video capture 6 for realsense through usbc
 out = cv2.VideoWriter(filename, cv2.VideoWriter_fourcc(*'mp4v'), fps, (frame_width, frame_height))
 
 print(f"Recording {label} at {timestamp}...")

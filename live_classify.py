@@ -13,7 +13,7 @@ fps = 20
 duration = 5  # seconds
 n_frames = fps * duration
 dt = 1 / fps
-wrist_index = 16
+# wrist_index = 16
 min_visibility = 0.5
 
 # Setup MediaPipe
@@ -42,11 +42,14 @@ while frame_count < n_frames:
 
     if results.pose_landmarks:
         mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
-        kp = results.pose_landmarks.landmark[wrist_index]
-        if kp.visibility > min_visibility:
-            positions.append([kp.x, kp.y, kp.z])
-        else:
-            positions.append([np.nan, np.nan, np.nan])
+        pose_vector = []
+        for lm in results.pose_landmarks.landmark:
+            if lm.visibility > min_visibility:
+                pose_vector.extend([lm.x, lm.y, lm.z])
+            else:
+                pose_vector.extend([np.nan, np.nan, np.nan])
+        positions.append(pose_vector)
+
     else:
         positions.append([np.nan, np.nan, np.nan])
 
@@ -64,12 +67,14 @@ print("Finished capturing movement.")
 
 # Fill in missing values
 positions = np.array(positions)
-for dim in range(3):
+for dim in range(positions.shape[1]):
     series = positions[:, dim]
     mask = np.isnan(series)
     if not np.all(mask):
         series[mask] = np.interp(np.flatnonzero(mask), np.flatnonzero(~mask), series[~mask])
     positions[:, dim] = series
+    positions = np.nan_to_num(positions, nan=0.0)
+
 
 # Compute features
 vel = np.gradient(positions, dt, axis=0)

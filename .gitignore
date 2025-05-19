@@ -1,3 +1,26 @@
 venv/
 __pycache__/
 *.pyc
+
+
+
+# Model and joblib files
+*.pkl
+*.joblib
+
+# Large video files and recordings
+*.mp4
+1_recordings/
+2_extracted_clips/
+3_skeleton_pose_data/
+4_extracted_motion_features/
+5_motion_output_graphs/
+6_motion_output_table/
+
+# CSVs containing generated or processed data
+0_motion_features.csv
+0_data_dictionary.csv
+6_motion_features.csv
+
+# Other
+.DS_Store

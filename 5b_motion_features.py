@@ -2,9 +2,10 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from config import session_timestamp
 
 # === CONFIG ===
-session_timestamp = "2025-05-18_22-35-34"
+# session_timestamp = "2025-05-18_22-35-34"
 features_csv = os.path.join("4_extracted_motion_features", session_timestamp, "motion_features.csv")
 output_dir = os.path.join("5_motion_output_graphs", session_timestamp)
 os.makedirs(output_dir, exist_ok=True)

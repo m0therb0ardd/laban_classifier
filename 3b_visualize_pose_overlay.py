@@ -3,9 +3,11 @@ import cv2
 import json
 import mediapipe as mp
 from mediapipe.framework.formats.landmark_pb2 import NormalizedLandmark, NormalizedLandmarkList
+from config import session_timestamp
+
 
 # === CONFIG ===
-session_timestamp = "2025-05-18_21-51-32"  # change to your session
+# session_timestamp = "2025-05-18_21-51-32"  # change to your session
 clip_name = "2025-05-18_21-51-32_punch_003"  # full clip name without extension
 
 video_path = os.path.join("2_extracted_clips", session_timestamp, f"{clip_name}.mp4")

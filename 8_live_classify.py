@@ -149,9 +149,15 @@ features = np.array([[
 label = clf.predict(features)[0]
 print(f"Predicted movement: **{label.upper()}**")
 
-# Save metadata
+# Prompt for true label
+true_label = input(f"Model predicted **{label.upper()}**. Enter correct label if wrong (or press Enter to confirm): ")
+if true_label.strip() == "":
+    true_label = label
+
+# Save prediction and features 
 debug_info = {
     "predicted_label": label,
+    "true_label": true_label,
     "features": features.tolist()
 }
 with open(os.path.join(log_dir, "prediction.json"), "w") as f:

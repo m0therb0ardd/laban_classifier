@@ -67,12 +67,27 @@ for clip_name in os.listdir(pose_root):
     # Replace any remaining NaNs with zeros --> we need this so we dont get all NaN values when we do gradient for velocity adn acceleration later
     positions = np.nan_to_num(positions, nan=0.0)
 
+    # === Normalize landmarks per frame: center and scale by hip distance
+    left_hip_index = 23
+    right_hip_index = 24
 
-    # # Final check before computing features
-    # print(f"→ About to compute motion features for: {item}")
-    # print("→ Any NaNs left in positions?", np.isnan(positions).any())
-    # print("→ First few values:\n", positions[:3, :9])
+    for i in range(positions.shape[0]):
+        # Get left and right hip (x, y, z)
+        lhip = positions[i, left_hip_index*3:left_hip_index*3+3]
+        rhip = positions[i, right_hip_index*3:right_hip_index*3+3]
 
+        # Compute body center and scale
+        body_center = (lhip + rhip) / 2
+        body_scale = np.linalg.norm(lhip - rhip)
+
+        if body_scale == 0:  # avoid divide-by-zero
+            body_scale = 1.0
+
+        # Normalize all landmarks
+        for j in range(33):  # 33 landmarks
+            start = j * 3
+            end = start + 3
+            positions[i, start:end] = (positions[i, start:end] - body_center) / body_scale
 
     # Compute motion features
     vel = np.gradient(positions, dt, axis=0)

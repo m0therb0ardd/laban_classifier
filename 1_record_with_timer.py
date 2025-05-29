@@ -16,6 +16,7 @@ clip_duration = 2  # seconds
 movements = ["float"] * 10 + ["punch"] * 10 # 50 float and 50 punch for now
 data_dict_path = "0_data_dictionary.csv"
 
+
 # === GENERATE TIMESTAMP ===
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 session_folder = os.path.join("1_recordings", timestamp)
@@ -43,7 +44,7 @@ with open(data_dict_path, mode='a', newline='') as file:
         writer.writerow([
             "timestamp", "clip_id", "label", "start_time", "end_time", "quality", "notes",
             "frame_rate", "resolution", "camera_info", "participant_id", "recording_location",
-            "raw_video_path"
+            "raw_video_path", "source_type"
         ])
 
     print(f"Starting recording: {len(movements)} clips")
@@ -125,7 +126,8 @@ with open(data_dict_path, mode='a', newline='') as file:
             camera_info,
             participant_id,
             recording_location,
-            raw_video_path
+            raw_video_path,
+            "record_with_timer"
         ])
 
 # === CLEANUP ===

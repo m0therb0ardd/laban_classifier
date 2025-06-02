@@ -4,7 +4,7 @@ import pandas as pd
 from config import session_timestamp
 
 # === CONFIG ===
-# session_timestamp = "2025-05-19_19-53-37"
+session_timestamp = "2025-05-28_22-06-27"
 clip_dir = os.path.join("2_extracted_clips", session_timestamp)
 data_dict_path = "0_data_dictionary.csv"
 

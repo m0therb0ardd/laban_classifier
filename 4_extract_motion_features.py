@@ -19,6 +19,7 @@ min_visibility = 0.5
 # Landmarks of interest
 landmark_indices = {
     "right_wrist": 16,
+    "right_wrist": 15,
     "left_ankle": 27,
     "right_ankle": 28
 }

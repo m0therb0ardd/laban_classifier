@@ -13,7 +13,7 @@ frame_height = 480
 frame_rate = 30
 camera_index = 6 #4 or 6 for realsense plug in
 clip_duration = 2  # seconds
-movements = ["float"] * 10 + ["punch"] * 10 # 50 float and 50 punch for now
+movements = ["glide"] * 20 + ["slash"] * 20 # 50 float and 50 punch for now
 data_dict_path = "0_data_dictionary.csv"
 
 

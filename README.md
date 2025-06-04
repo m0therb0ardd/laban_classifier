@@ -68,7 +68,7 @@ This project aims to classify short [dance gestures](https://www.youtube.com/wat
     Captures a live 5-second clip, extracts features, and predicts the movement type. Also displays video and predicted label.
 
 ## General Resources 
-1. [Performance Arc] (https://docs.google.com/document/d/1Sa50h2eDBSr1ljnjP7Vl_LQX1kHWB3tFU8qgbsUmAcs/edit?tab=t.0#heading=h.waxb0a52r4cj)
-2. [Coachbot User Guide] (https://coachbotswarm.github.io/User-Guide/#available-robot-functions)
+1. [Performance Arc](https://docs.google.com/document/d/1Sa50h2eDBSr1ljnjP7Vl_LQX1kHWB3tFU8qgbsUmAcs/edit?tab=t.0#heading=h.waxb0a52r4cj)
+2. [Coachbot User Guide](https://coachbotswarm.github.io/User-Guide/#available-robot-functions)
 3. [Coachbot Swarm Repo](https://github.com/Coachbot-Swarm)
 4, [Coachbot Simulator](https://github.com/michelleezhang/swarm_simulation/tree/master)

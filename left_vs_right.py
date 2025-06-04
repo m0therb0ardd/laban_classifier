@@ -43,6 +43,7 @@
 import cv2
 import mediapipe as mp
 import os
+import time
 
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
@@ -51,6 +52,9 @@ cap = cv2.VideoCapture(0)
 gesture_history = []
 GESTURE_THRESHOLD = 5
 LAST_SENT = None
+
+still_start_time = None
+STILLNESS_DURATION = 3 #seconds 
 
 def get_gesture(landmarks):
     left_wrist_x = landmarks[mp_pose.PoseLandmark.LEFT_WRIST].x
@@ -67,6 +71,13 @@ def get_gesture(landmarks):
         return "RIGHT"
     else:
         return "NONE"
+    
+def check_stillness(landmarks):
+    head_y = landmarks[mp_pose.PoseLandmark.NOSE].y
+    left_hip_y = landmarks[mp_pose.PoseLandmark.LEFT_HIP].y
+    right_hip_y = landmarks[mp_pose.PoseLandmark.RIGHT_HIP].y
+
+    return abs(head_y - left_hip_y) < 0.05 and abs(head_y - right_hip_y) < 0.05
 
 def write_command(command):
     with open("command.txt", "w") as f:
@@ -82,6 +93,18 @@ while True:
 
     if results.pose_landmarks:
         landmarks = results.pose_landmarks.landmark
+
+        # === Check for stillness ===
+        if check_stillness(landmarks):
+            if still_start_time is None:
+                still_start_time = time.time()
+            elif time.time() - still_start_time >= STILLNESS_DURATION and LAST_SENT != "STILLNESS":
+                print("Detected STILLNESS")
+                write_command("STILLNESS")
+                LAST_SENT = "STILLNESS"
+        else:
+            still_start_time = None  # reset timer if not still
+
         current_gesture = get_gesture(landmarks)
         gesture_history.append(current_gesture)
 

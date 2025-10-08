@@ -6,7 +6,7 @@ To resume work on this project:
 
 ```bash
 cd ~/turtle_swarm
-source env/bin/activate
+source venv/bin/activate
 
 ```
 

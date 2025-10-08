@@ -281,11 +281,25 @@ for dim in range(positions.shape[1]):
 positions = np.nan_to_num(positions)
 
 
-# === NORMALIZE: center all points around hip midpoint ===
-left_hip = positions[:, 23 * 3 : 23 * 3 + 3]
-right_hip = positions[:, 24 * 3 : 24 * 3 + 3]
-hip_center = (left_hip + right_hip) / 2.0
-positions -= np.repeat(hip_center, 33, axis=1)  # 33 landmarks * 3 dimensions
+# # === NORMALIZE: center all points around hip midpoint ===
+# left_hip = positions[:, 23 * 3 : 23 * 3 + 3]
+# right_hip = positions[:, 24 * 3 : 24 * 3 + 3]
+# hip_center = (left_hip + right_hip) / 2.0
+# positions -= np.repeat(hip_center, 33, axis=1)  # 33 landmarks * 3 dimensions
+# === NORMALIZE (match training): center at hip midpoint AND scale by hip distance, per-frame
+left_hip_index = 23
+right_hip_index = 24
+for i in range(positions.shape[0]):
+    lhip = positions[i, left_hip_index*3:left_hip_index*3+3]
+    rhip = positions[i, right_hip_index*3:right_hip_index*3+3]
+    body_center = (lhip + rhip) / 2.0
+    body_scale = np.linalg.norm(lhip - rhip)
+    if body_scale == 0:
+        body_scale = 1.0
+    for j in range(33):
+        s = j*3; e = s+3
+        positions[i, s:e] = (positions[i, s:e] - body_center) / body_scale
+
 
 
 for i, pose in enumerate(positions):
@@ -300,30 +314,66 @@ for i, pose in enumerate(positions):
     with open(os.path.join(session_folder, f"{i:03d}.json"), "w") as f:
         json.dump(frame_dict, f)
 
-# === COMPUTE FEATURES ===
+import pandas as pd
+
+# Motion magnitudes
 vel = np.gradient(positions, dt, axis=0)
 acc = np.gradient(vel, dt, axis=0)
 jerk = np.gradient(acc, dt, axis=0)
-vel_mag = np.linalg.norm(vel, axis=1)
-acc_mag = np.linalg.norm(acc, axis=1)
+vel_mag  = np.linalg.norm(vel,  axis=1)
+acc_mag  = np.linalg.norm(acc,  axis=1)
 jerk_mag = np.linalg.norm(jerk, axis=1)
 
-landmark_indices = {"right_wrist": 16, "right_ankle": 28, "left_ankle": 27}
-range_features = []
-for name, index in landmark_indices.items():
-    x_vals = positions[:, index * 3 + 0]
-    y_vals = positions[:, index * 3 + 1]
-    range_features.extend([np.max(x_vals) - np.min(x_vals), np.max(y_vals) - np.min(y_vals)])
+# Landmark ranges (match training exactly)
+idx = {"left_wrist":15, "right_wrist":16, "left_ankle":27, "right_ankle":28}
+range_features = {
+    f"range_x_{name}": np.ptp(positions[:, k*3 + 0]) for name, k in idx.items()
+}
+range_features.update({
+    f"range_y_{name}": np.ptp(positions[:, k*3 + 1]) for name, k in idx.items()
+})
 
-features = np.array([[
-    np.mean(vel_mag), np.max(vel_mag), np.std(vel_mag),
-    np.mean(acc_mag), np.max(acc_mag), np.std(acc_mag),
-    np.mean(jerk_mag), np.max(jerk_mag), np.std(jerk_mag),
-    *range_features
-]])
+feat = {
+    "mean_velocity": np.mean(vel_mag),
+    "max_velocity":  np.max(vel_mag),
+    "std_velocity":  np.std(vel_mag),
+    "mean_acceleration": np.mean(acc_mag),
+    "max_acceleration":  np.max(acc_mag),
+    "std_acceleration":  np.std(acc_mag),
+    "mean_jerk": np.mean(jerk_mag),
+    "max_jerk":  np.max(jerk_mag),
+    "std_jerk":  np.std(jerk_mag),
+}
+feat.update(range_features)
 
-# === PREDICT AND CONFIRM LABEL ===
-label = clf.predict(features)[0]
+# Align to the model's column order if available
+try:
+    cols = list(clf.feature_names_in_)  # present if trained from a pandas DataFrame
+except AttributeError:
+    cols = None
+
+if cols is not None:
+    # Make sure all expected columns exist (future-proof)
+    for c in cols:
+        if c not in feat:
+            feat[c] = 0.0
+    X_infer = pd.DataFrame([[feat[c] for c in cols]], columns=cols)
+else:
+    # Fall back to the training extractor's insertion order:
+    ordered_cols = [
+        "mean_velocity","max_velocity","std_velocity",
+        "mean_acceleration","max_acceleration","std_acceleration",
+        "mean_jerk","max_jerk","std_jerk",
+        "range_x_left_wrist","range_y_left_wrist",
+        "range_x_right_wrist","range_y_right_wrist",
+        "range_x_left_ankle","range_y_left_ankle",
+        "range_x_right_ankle","range_y_right_ankle",
+    ]
+    X_infer = pd.DataFrame([[feat[c] for c in ordered_cols]], columns=ordered_cols)
+
+# Predict
+label = clf.predict(X_infer)[0]
+
 true_label = input(f"Model predicted **{label.upper()}**. Enter correct label if wrong (or press Enter to confirm): ")
 if true_label.strip() == "":
     true_label = label

@@ -91,7 +91,7 @@ fourcc = cv2.VideoWriter_fourcc(*'mp4v')
 out = cv2.VideoWriter(raw_video_path, fourcc, frame_rate, (frame_width, frame_height))
 
 # === LOAD MODEL ===
-clf = joblib.load("random_forest_model.pkl")
+# clf = joblib.load("random_forest_model.pkl")
 fps = frame_rate
 dt = 1 / fps
 min_visibility = 0.5
@@ -192,79 +192,112 @@ for i, pose in enumerate(positions):
         json.dump(frame_dict, f)
 
 
-# === FEATURE EXTRACTION ===
-vel = np.gradient(positions, dt, axis=0)
-acc = np.gradient(vel, dt, axis=0)
-jerk = np.gradient(acc, dt, axis=0)
-vel_mag  = np.linalg.norm(vel,  axis=1)
-acc_mag  = np.linalg.norm(acc,  axis=1)
-jerk_mag = np.linalg.norm(jerk, axis=1)
+# --- after you finished NORMALIZE (positions is T x 99), BEFORE prediction ---
 
-# Landmark ranges (match training exactly)
-idx = {"left_wrist":15, "right_wrist":16, "left_ankle":27, "right_ankle":28}
-range_features = {
-    f"range_x_{name}": np.ptp(positions[:, k*3 + 0]) for name, k in idx.items()
-}
-range_features.update({
-    f"range_y_{name}": np.ptp(positions[:, k*3 + 1]) for name, k in idx.items()
-})
+def compute_features(positions, dt):
+    import numpy as np
+    # indices
+    I = {
+        "left_shoulder":11, "right_shoulder":12,
+        "left_wrist":15, "right_wrist":16,
+        "left_hip":23, "right_hip":24,
+        "left_ankle":27, "right_ankle":28
+    }
 
-feat = {
-    "mean_velocity": np.mean(vel_mag),
-    "max_velocity":  np.max(vel_mag),
-    "std_velocity":  np.std(vel_mag),
-    "mean_acceleration": np.mean(acc_mag),
-    "max_acceleration":  np.max(acc_mag),
-    "std_acceleration":  np.std(acc_mag),
-    "mean_jerk": np.mean(jerk_mag),
-    "max_jerk":  np.max(jerk_mag),
-    "std_jerk":  np.std(jerk_mag),
-}
-feat.update(range_features)
+    # helpers
+    def joint_xy(A, idx):
+        return A[:, idx*3+0], A[:, idx*3+1]
 
-# Align to the model's column order if available
-try:
-    cols = list(clf.feature_names_in_)  # present if trained from a pandas DataFrame
-except AttributeError:
-    cols = None
+    def start_end_xy(A, idx):
+        x, y = joint_xy(A, idx)
+        return x[0], y[0], x[-1], y[-1]
 
-if cols is not None:
-    # Make sure all expected columns exist (future-proof)
-    for c in cols:
-        if c not in feat:
-            feat[c] = 0.0
-    X_infer = pd.DataFrame([[feat[c] for c in cols]], columns=cols)
-else:
-    # Fall back to the training extractor's insertion order:
-    ordered_cols = [
-        "mean_velocity","max_velocity","std_velocity",
-        "mean_acceleration","max_acceleration","std_acceleration",
-        "mean_jerk","max_jerk","std_jerk",
-        "range_x_left_wrist","range_y_left_wrist",
-        "range_x_right_wrist","range_y_right_wrist",
-        "range_x_left_ankle","range_y_left_ankle",
-        "range_x_right_ankle","range_y_right_ankle",
-    ]
-    X_infer = pd.DataFrame([[feat[c] for c in ordered_cols]], columns=ordered_cols)
-# === MAP: label -> (mode, extras) ===
-label_to_mode = {
-    "float":      ("float",        {}),
-    "glide":      ("glide",        {}),
-    "handsup":    ("glitch",       {}),
-    "lefthand":   ("directional",  {"direction": "left"}),
-    "righthand":  ("directional",  {"direction": "right"}),
-    "punch":      ("punch",        {}),
-    "slash":      ("slash",        {}),
-    "stillness":  ("encircling",   {}),
-}
+    def path_len(A, idx):
+        x, y = joint_xy(A, idx)
+        return float(np.sum(np.sqrt(np.diff(x)**2 + np.diff(y)**2)))
 
-# ==== PREDICT ====
-print("\nPossible classifications:")
-for label_name in label_to_mode.keys():
-    print("  -", label_name)
-print()
+    def straightness(A, idx):
+        x0, y0, x1, y1 = start_end_xy(A, idx)
+        L = path_len(A, idx) + 1e-9
+        return float(np.hypot(x1 - x0, y1 - y0) / L)
 
+    # motion stats (must match training)
+    vel  = np.gradient(positions, dt, axis=0)
+    acc  = np.gradient(vel,       dt, axis=0)
+    jerk = np.gradient(acc,       dt, axis=0)
+    vel_mag  = np.linalg.norm(vel,  axis=1)
+    acc_mag  = np.linalg.norm(acc,  axis=1)
+    jerk_mag = np.linalg.norm(jerk, axis=1)
+
+    feat = {
+        "mean_velocity": float(np.mean(vel_mag)),
+        "max_velocity":  float(np.max(vel_mag)),
+        "std_velocity":  float(np.std(vel_mag)),
+        "mean_acceleration": float(np.mean(acc_mag)),
+        "max_acceleration":  float(np.max(acc_mag)),
+        "std_acceleration":  float(np.std(acc_mag)),
+        "mean_jerk": float(np.mean(jerk_mag)),
+        "max_jerk":  float(np.max(jerk_mag)),
+        "std_jerk":  float(np.std(jerk_mag)),
+    }
+
+    # ranges (must match training)
+    for name, idx in {"left_wrist":15,"right_wrist":16,"left_ankle":27,"right_ankle":28}.items():
+        x_vals = positions[:, idx*3+0]
+        y_vals = positions[:, idx*3+1]
+        feat[f"range_x_{name}"] = float(np.ptp(x_vals))
+        feat[f"range_y_{name}"] = float(np.ptp(y_vals))
+
+    # shoulder/hip reference levels
+    LSh_y = float(np.mean(positions[:, I["left_shoulder"]*3+1]))
+    RSh_y = float(np.mean(positions[:, I["right_shoulder"]*3+1]))
+    shoulder_y = 0.5*(LSh_y + RSh_y)
+    LH_y = float(np.mean(positions[:, I["left_hip"]*3+1]))
+    RH_y = float(np.mean(positions[:, I["right_hip"]*3+1]))
+    hip_y = 0.5*(LH_y + RH_y)
+    def rel_levels(y): return float(y - shoulder_y), float(y - hip_y)
+
+    # positional features for wrists/ankles
+    for tag, jidx in [("lw", I["left_wrist"]), ("rw", I["right_wrist"]),
+                      ("la", I["left_ankle"]), ("ra", I["right_ankle"])]:
+        x0, y0, x1, y1 = start_end_xy(positions, jidx)
+        dx, dy = (x1 - x0), (y1 - y0)
+        y0_sh, y0_hip = rel_levels(y0)
+        y1_sh, y1_hip = rel_levels(y1)
+        L = path_len(positions, jidx)
+        St = straightness(positions, jidx)
+        feat[f"{tag}_x0"] = x0;  feat[f"{tag}_y0"] = y0
+        feat[f"{tag}_x1"] = x1;  feat[f"{tag}_y1"] = y1
+        feat[f"{tag}_dx"] = dx;  feat[f"{tag}_dy"] = dy
+        feat[f"{tag}_y0_minus_sh"]  = y0_sh
+        feat[f"{tag}_y0_minus_hip"] = y0_hip
+        feat[f"{tag}_y1_minus_sh"]  = y1_sh
+        feat[f"{tag}_y1_minus_hip"] = y1_hip
+        feat[f"{tag}_path_len"]     = L
+        feat[f"{tag}_straight"]     = St
+
+    # symmetry cues (as in training)
+    feat["wrist_y_diff_start"] = float(positions[0, I["right_wrist"]*3+1] - positions[0, I["left_wrist"]*3+1])
+    feat["wrist_y_diff_end"]   = float(positions[-1, I["right_wrist"]*3+1] - positions[-1, I["left_wrist"]*3+1])
+
+    return feat
+
+# --- use it at inference ---
+feat = compute_features(positions, dt)
+
+# build X_infer in the model’s column order
+cols = list(getattr(clf, "feature_names_in_", [])) or list(feat.keys())
+for c in cols:
+    if c not in feat:
+        feat[c] = 0.0
+X_infer = pd.DataFrame([[feat[c] for c in cols]], columns=cols)
+
+# quick sanity peek
+print({k: round(feat[k],3) for k in ["rw_dx","rw_dy","lw_dx","lw_dy","rw_y1_minus_sh","lw_y1_minus_sh"] if k in feat})
+
+# then:
 label = clf.predict(X_infer)[0]
+
 
 # === OPTIONAL: show prediction probabilities ===
 if hasattr(clf, "predict_proba"):
@@ -291,6 +324,18 @@ debug_info = {
 }
 with open(os.path.join(session_folder, "prediction.json"), "w") as f:
     json.dump(debug_info, f, indent=2)
+
+
+label_to_mode = {
+    "float":      ("float",        {}),
+    "glide":      ("glide",        {}),
+    "handsup":    ("glitch",       {}),
+    "lefthand":   ("directional",  {"direction": "left"}),
+    "righthand":  ("directional",  {"direction": "right"}),
+    "punch":      ("punch",        {}),
+    "slash":      ("slash",        {}),
+    "stillness":  ("encircling",   {}),
+}
 
 # === MAP LABEL -> MODE (MINIMAL CONFIG), WRITE JSON, COPY TO ROBOT REPO ===
 label_lc = true_label.strip().lower()

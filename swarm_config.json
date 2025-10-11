@@ -1,12 +1,12 @@
 {
   "extras": {},
-  "mode": "glitch",
+  "mode": "glide",
   "source": {
-    "label": "handsup",
-    "raw_video": "live_classify_logs/2025-10-11_14-51-28/2025-10-11_14-51-28_clip.mp4",
-    "session_folder": "live_classify_logs/2025-10-11_14-51-28",
+    "label": "glide",
+    "raw_video": "live_classify_logs/2025-10-11_17-53-32/2025-10-11_17-53-32_clip.mp4",
+    "session_folder": "live_classify_logs/2025-10-11_17-53-32",
     "type": "live_classify"
   },
-  "timestamp": 1760212298.000598,
+  "timestamp": 1760223221.4472425,
   "version": 1
 }

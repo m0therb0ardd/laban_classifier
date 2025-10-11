@@ -8,7 +8,7 @@ from config import session_timestamp
 
 
 # === CONFIG ===
-# session_timestamp = "2025-05-18_22-35-34"
+session_timestamp = "2025-10-10_13-28-09"
 pose_root = os.path.join("3_skeleton_pose_data", session_timestamp)
 data_dict_path = "0_data_dictionary.csv"
 output_root = "5_motion_output_graphs"

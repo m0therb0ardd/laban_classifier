@@ -1,1 +1,1 @@
-RIGHT
+{"cmd": "STILLNESS", "ts": 1759950348.5955749, "mirrored": false}

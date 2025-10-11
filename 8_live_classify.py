@@ -7,6 +7,20 @@ import json
 from datetime import datetime
 import cv2
 import csv
+import tempfile
+import shutil
+import pandas as pd
+
+# top of live_classify.py
+THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+MODEL_PATH = os.path.join(THIS_DIR, "random_forest_model.pkl")
+clf = joblib.load(MODEL_PATH)
+print("Loaded model:", MODEL_PATH)
+try:
+    mtime = os.path.getmtime(MODEL_PATH)
+    print("Model mtime:", datetime.fromtimestamp(mtime))
+except Exception:
+    pass
 
 
 # === CONFIGURATION ===
@@ -19,6 +33,47 @@ frame_rate = 20
 clip_duration = 2  # seconds
 camera_index = 6
 data_dict_path = "0_data_dictionary.csv"
+
+
+
+# where the json file will live 
+ROBOT_CONFIG_DEST = os.path.expanduser("~/coachbot_example/submission_repo/user/swarm_config.json")
+
+# local file written first then copy to ROBOT_CONFIG_DEST
+SWARM_CONFIG_PATH = "swarm_config.json"
+
+# === WRITE AND COPY HELPERS === 
+def atomic_write_json(path, obj):
+    ddir = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".tmp_swarm_config_", dir=ddir)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(obj, sort_keys=True, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)  # atomic on POSIX
+    except Exception:
+        try:
+            os.remove(tmp)
+        except:
+            pass
+        raise
+
+def atomic_copy_to(dest_path, src_path):
+    ddir = os.path.dirname(os.path.abspath(dest_path)) or "."
+    if not os.path.isdir(ddir):
+        os.makedirs(ddir)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp_swarm_config_", dir=ddir)
+    try:
+        os.close(fd)
+        shutil.copy2(src_path, tmp)   # preserve mtime
+        os.replace(tmp, dest_path)    # atomic on POSIX
+    except Exception:
+        try:
+            os.remove(tmp)
+        except:
+            pass
+        raise
 
 # === TIMESTAMP + DIRECTORIES ===
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -123,8 +178,7 @@ for i in range(positions.shape[0]):
         s = j*3; e = s+3
         positions[i, s:e] = (positions[i, s:e] - body_center) / body_scale
 
-
-
+# === PER FRAME SKELETON JSON ===
 for i, pose in enumerate(positions):
     frame_dict = []
     for j in range(len(pose) // 3):
@@ -137,9 +191,8 @@ for i, pose in enumerate(positions):
     with open(os.path.join(session_folder, f"{i:03d}.json"), "w") as f:
         json.dump(frame_dict, f)
 
-import pandas as pd
 
-# Motion magnitudes
+# === FEATURE EXTRACTION ===
 vel = np.gradient(positions, dt, axis=0)
 acc = np.gradient(vel, dt, axis=0)
 jerk = np.gradient(acc, dt, axis=0)
@@ -193,22 +246,73 @@ else:
         "range_x_right_ankle","range_y_right_ankle",
     ]
     X_infer = pd.DataFrame([[feat[c] for c in ordered_cols]], columns=ordered_cols)
+# === MAP: label -> (mode, extras) ===
+label_to_mode = {
+    "float":      ("float",        {}),
+    "glide":      ("glide",        {}),
+    "handsup":    ("glitch",       {}),
+    "lefthand":   ("directional",  {"direction": "left"}),
+    "righthand":  ("directional",  {"direction": "right"}),
+    "punch":      ("punch",        {}),
+    "slash":      ("slash",        {}),
+    "stillness":  ("encircling",   {}),
+}
 
-# Predict
+# ==== PREDICT ====
+print("\nPossible classifications:")
+for label_name in label_to_mode.keys():
+    print("  -", label_name)
+print()
+
 label = clf.predict(X_infer)[0]
 
-true_label = input(f"Model predicted **{label.upper()}**. Enter correct label if wrong (or press Enter to confirm): ")
-if true_label.strip() == "":
-    true_label = label
+# === OPTIONAL: show prediction probabilities ===
+if hasattr(clf, "predict_proba"):
+    print("\nModel confidence by class:")
+    probs = clf.predict_proba(X_infer)[0]
+    for c, p in zip(clf.classes_, probs):
+        print(f"  {c:12s}: {p:.2f}")
+    # Optional: show top class line too
+    best_idx = int(np.argmax(probs))
+    print(f"Top class: {clf.classes_[best_idx]} ({probs[best_idx]:.2f})\n")
+
+# No confirmation prompt for now — auto-accept model label
+true_label = str(label)
 
 # === SAVE DEBUG INFO ===
 debug_info = {
-    "predicted_label": label,
+    "predicted_label": str(label),
     "true_label": true_label,
-    "features": features.tolist()
+    "features": feat,
+    "columns_used": list(X_infer.columns),
+    "timestamp": timestamp,
+    "session_folder": session_folder,
+    "raw_video": raw_video_path
 }
 with open(os.path.join(session_folder, "prediction.json"), "w") as f:
     json.dump(debug_info, f, indent=2)
+
+# === MAP LABEL -> MODE (MINIMAL CONFIG), WRITE JSON, COPY TO ROBOT REPO ===
+label_lc = true_label.strip().lower()
+mode, extras = label_to_mode.get(label_lc, ("encircling", {}))
+
+cfg_obj = {
+    "version": 1,
+    "mode": mode,
+    "timestamp": time.time(),
+    "source": {
+        "type": "live_classify",
+        "session_folder": session_folder,
+        "raw_video": raw_video_path,
+        "label": true_label
+    },
+    "extras": extras if extras else {}
+}
+
+atomic_write_json(SWARM_CONFIG_PATH, cfg_obj)
+print(f"Wrote {SWARM_CONFIG_PATH} with mode={mode}")
+atomic_copy_to(ROBOT_CONFIG_DEST, SWARM_CONFIG_PATH)
+print(f"Copied config to robot folder: {ROBOT_CONFIG_DEST}")
 
 # === OPTIONAL: APPEND TO DATA DICTIONARY ===
 save = input("Save this sample to data dictionary? (y/n): ").strip().lower()

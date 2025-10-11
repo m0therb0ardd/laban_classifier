@@ -5,7 +5,7 @@ import pandas as pd
 from config import session_timestamp
 
 
-# session_timestamp = "2025-05-18_21-51-32"  # change to match current session
+session_timestamp = "2025-10-10_13-28-09"
 output_root = "4_extracted_motion_features"
 output_dir = os.path.join(output_root, session_timestamp)
 os.makedirs(output_dir, exist_ok=True)

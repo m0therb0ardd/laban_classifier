@@ -6,7 +6,7 @@ import mediapipe as mp
 from config import session_timestamp
 
 # === CONFIG ===
-# session_timestamp = "2025-05-18_22-35-34"
+session_timestamp = "2025-10-10_13-28-09"
 data_dict_path = "0_data_dictionary.csv"
 clip_dir = os.path.join("2_extracted_clips", session_timestamp)
 output_root = os.path.join("3_skeleton_pose_data", session_timestamp)

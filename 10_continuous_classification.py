@@ -29,6 +29,21 @@ os.makedirs(OUT_DIR, exist_ok=True)
 EVENT_CSV       = os.path.join(OUT_DIR, "events.csv")
 RAW_MP4         = os.path.join(OUT_DIR, "raw.mp4")
 
+
+# map pose label -> (mode, extras)
+label_to_mode = {
+    "float":      ("float",              {}),
+    "glide":      ("glide",              {}),
+    "handsup":    ("glitch",             {}),
+    "lefthand":   ("directional_left",   {}),
+    "righthand":  ("directional_right",  {}),
+    "punch":      ("punch",              {}),
+    "slash":      ("slash",              {}),
+    "stillness":  ("encircling",         {}),
+}
+
+PAUSE_AFTER_EVENT_SEC = 45.0   # <— your “don’t look for poses” window
+
 # ---------- MODEL LOAD ----------
 THIS_DIR   = os.path.abspath(os.path.dirname(__file__))
 MODEL_PATH = os.path.join(THIS_DIR, "random_forest_model.pkl")
@@ -133,6 +148,53 @@ def compute_features(positions, dt):
 # align to model columns
 MODEL_COLS = list(getattr(clf, "feature_names_in_", []))
 
+def write_debug_json(*, label, true_label, feat, X_df, session_folder, raw_video_path):
+    """Writes prediction.json in the session folder using your structure."""
+    ts = datetime.now().isoformat(timespec="seconds")
+    mapped_mode, mapped_extras = label_to_mode.get(label, ("unknown", {}))
+
+    debug_info = {
+        "predicted_label": str(label),
+        "true_label": true_label,                    # use None if unknown
+        "features": feat,                            # dict of floats
+        "columns_used": list(X_df.columns),
+        "timestamp": ts,
+        "session_folder": session_folder,
+        "raw_video": raw_video_path,
+        # helpful extras:
+        "mapped_mode": mapped_mode,
+        "mapped_extras": mapped_extras
+    }
+
+    out_path = os.path.join(session_folder, "prediction.json")
+    with open(out_path, "w") as f:
+        json.dump(debug_info, f, indent=2)
+    print(f"[JSON] wrote {out_path}")
+
+def write_swarm_config(label, session_folder, raw_video_path):
+    """Creates or overwrites swarm_config.json with current mode + source info."""
+    mode, extras = label_to_mode.get(label, ("unknown", {}))
+    data = {
+        "extras": extras,
+        "mode": mode,
+        "source": {
+            "label": label,
+            "raw_video": raw_video_path,
+            "session_folder": session_folder,
+            "type": "live_classify"
+        },
+        "timestamp": time.time(),
+        "version": 1
+    }
+
+    # save this in the *root project folder*, not inside session folder
+    out_path = os.path.join(os.path.dirname(__file__), "swarm_config.json")
+    with open(out_path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"[SWARM CONFIG] wrote {out_path}")
+
+
+
 # ---------- MEDIA PIPE ----------
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.5)
@@ -159,6 +221,8 @@ last_run_idx = -10**9
 # EMA state
 ema = np.zeros(len(clf.classes_), dtype=float)
 EMA_ALPHA = 0.4  # smoothing factor (0..1)
+pause_until_time = -1e9   # wall-clock seconds since t0 when we resume checking
+
 
 # event state: per label timing + cooldown
 last_above = {c: None for c in clf.classes_}
@@ -177,6 +241,15 @@ try:
         if not ok:
             break
         now = time.time() - t0
+
+        # --- GLOBAL PAUSE GATE: skip classification while paused, still record video
+        is_paused = (now < pause_until_time)
+        if is_paused:
+            # optional HUD
+            remaining = pause_until_time - now
+            cv2.putText(frame, f"PAUSED {remaining:0.0f}s", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 180, 255), 3)
+
 
         # pose
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -201,7 +274,10 @@ try:
         deque_time.append(now)
 
         # classification step?
-        if len(deque_xyv) == win_frames and (frame_idx - last_run_idx) >= step_frames:
+        # classification step?
+        if (not is_paused) and len(deque_xyv) == win_frames and (frame_idx - last_run_idx) >= step_frames:
+
+
             last_run_idx = frame_idx
             A = np.stack(deque_xyv, axis=0)  # (T, 99)
 
@@ -248,12 +324,13 @@ try:
             cls = top_label
             t_last = last_above.get(cls, None)
             recently = (deque_time[-1] - last_event_time[cls]) < COOLDOWN_SEC
+
+            # === your existing event block ===
             if (t_last is not None) and (deque_time[-1] - t_last >= MIN_EVENT_SEC) and (top_prob >= ON_THRESH) and not recently:
-                # finalize event window: from t_last to now
                 t_start = t_last
                 t_end   = deque_time[-1]
                 last_event_time[cls] = deque_time[-1]
-                last_above[cls] = None  # reset
+                last_above[cls] = None
 
                 # write event to CSV
                 with open(EVENT_CSV, "a", newline="") as f:
@@ -261,15 +338,51 @@ try:
                     w.writerow([f"{t_start:.2f}", f"{t_end:.2f}", cls, f"{top_prob:.3f}"])
                 print(f"[EVENT] {cls:10s} {t_start:.2f}–{t_end:.2f}  peak≈{top_prob:.2f}")
 
+                # === NEW: write prediction.json ===
+                # true_label is unknown in live mode; use None or "".
+                write_debug_json(
+                    label=cls,
+                    true_label=None,
+                    feat=feat,
+                    X_df=X,                         # the aligned DataFrame you just built
+                    session_folder=OUT_DIR,
+                    raw_video_path=RAW_MP4
+                )
+
+                # also update global swarm_config.json
+                write_swarm_config(
+                    label=cls,
+                    session_folder=OUT_DIR,
+                    raw_video_path=RAW_MP4
+                )
+
+
+                # === NEW: start global pause ===
+                pause_until_time = now + PAUSE_AFTER_EVENT_SEC
+
+
             # HUD
-            txt = f"{top_label}  {top_prob:0.2f}"
-            cv2.putText(frame, txt, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0,255,0) if top_prob>=ON_THRESH else (0,200,200), 3)
-            # tiny class bar chart
-            x0, y0, w, h = 20, 60, 220, 16
-            for i, cls in enumerate(clf.classes_):
-                p = float(ema[i])
-                cv2.rectangle(frame, (x0, y0 + i* (h+6)), (x0 + int(w*p), y0 + i*(h+6) + h), (50,200,50), -1)
-                cv2.putText(frame, f"{cls[:10]:10s} {p:0.2f}", (x0 + w + 10, y0 + i*(h+6) + h - 2), cv2.FONT_HERSHEY_PLAIN, 1.1, (240,240,240), 1)
+            if not is_paused:
+                txt = f"{top_label}  {top_prob:0.2f}"
+                cv2.putText(frame, txt, (20, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.1,
+                            (0,255,0) if top_prob>=ON_THRESH else (0,200,200), 3)
+
+                # tiny class bar chart
+                x0, y0, w, h = 20, 60, 220, 16
+                for i, cls in enumerate(clf.classes_):
+                    p = float(ema[i])
+                    cv2.rectangle(frame, (x0, y0 + i*(h+6)),
+                                (x0 + int(w*p), y0 + i*(h+6) + h),
+                                (50,200,50), -1)
+                    cv2.putText(frame, f"{cls[:10]:10s} {p:0.2f}",
+                                (x0 + w + 10, y0 + i*(h+6) + h - 2),
+                                cv2.FONT_HERSHEY_PLAIN, 1.1, (240,240,240), 1)
+            else:
+                # show paused banner in the same spot
+                remaining = pause_until_time - now
+                cv2.putText(frame, f"PAUSED {remaining:0.0f}s", (20, 40),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 180, 255), 3)
 
         # show & record
         cv2.imshow("Live Sliding-Window Classify", frame)
